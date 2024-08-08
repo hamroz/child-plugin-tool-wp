@@ -1,9 +1,20 @@
-<?php 
+<?php
+/**
+ * Core functionality for the BookingPress Appointment Booking Pro Child plugin
+ *
+ * This file contains the core functions and configurations for the child plugin,
+ * including path definitions, directory creation, and revert functionality.
+ *
+ * @package BookingPress
+ * @subpackage BookingPress Appointment Booking Pro Child
+ */
+
+// Enable error reporting for debugging
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-//determine the paths we need to work with
+// Define paths
 $currentDir = dirname(__FILE__);
 $parentPluginDir = str_replace("-child/src", "", $currentDir);
 $childPluginDir = str_replace("/src", "", $currentDir);
@@ -12,171 +23,180 @@ $originalDir = str_replace("/src", "/original", $currentDir);
 $removeDir = str_replace("/src", "/remove", $currentDir);
 $newfilesDir = str_replace("/src", "/src/cache/newFiles", $currentDir);
 
-//First delete the delete_me.txt files
-if(file_exists($childPluginDir . "/modifications/delete_me.txt"))
-    unlink($childPluginDir . "/modifications/delete_me.txt");
-if(file_exists($childPluginDir . "/original/delete_me.txt"))
-    unlink($childPluginDir . "/original/delete_me.txt");
-if(file_exists($childPluginDir . "/src/cache/newFiles/delete_me.txt"))
-    unlink($childPluginDir . "/src/cache/newFiles/delete_me.txt");
+// Remove placeholder files
+$placeholderFiles = [
+    $childPluginDir . "/modifications/delete_me.txt",
+    $childPluginDir . "/original/delete_me.txt",
+    $childPluginDir . "/src/cache/newFiles/delete_me.txt"
+];
+foreach ($placeholderFiles as $file) {
+    if (file_exists($file)) {
+        unlink($file);
+    }
+}
 
-//make sure the core directories exists
-if(!is_dir($childPluginDir . "/original"))
-    mkdir($childPluginDir . "/original", 0777, true);
-if(!is_dir($childPluginDir . "/modifications"))
-    mkdir($childPluginDir . "/modifications", 0777, true);
-if(!is_dir($childPluginDir . "/src/cache/newFiles"))
-    mkdir($childPluginDir . "/src/cache/newFiles", 0777, true);
-if(!is_dir($childPluginDir . "/remove"))
-    mkdir($childPluginDir . "/remove", 0777, true);
+// Ensure core directories exist
+$coreDirs = [
+    $childPluginDir . "/original",
+    $childPluginDir . "/modifications",
+    $childPluginDir . "/src/cache/newFiles",
+    $childPluginDir . "/remove"
+];
+foreach ($coreDirs as $dir) {
+    if (!is_dir($dir)) {
+        mkdir($dir, 0777, true);
+    }
+}
 
-//determine folder positions for cleaner path outputs
+// Determine folder positions for cleaner path outputs
 $currentPaths = explode("/", $currentDir);
 $pluginFolder = $currentPaths[count($currentPaths) - 3];
-$pluginFolderPos = strpos($currentDir, $pluginFolder);
-$pluginFolderPos = $pluginFolderPos + strlen($pluginFolder);
+$pluginFolderPos = strpos($currentDir, $pluginFolder) + strlen($pluginFolder);
 
-//output result model
-class OutputModel
-{
-  //set this to "apply" or "revert"
-  public $operation;
-  //store a list of OuputItemModel for modified items
-  public $modfiedItems;
-  //store a list of OuputItemModel for original files
-  public $originalItems;
+/**
+ * Output result model class
+ */
+class OutputModel {
+    public $operation; // 'apply' or 'revert'
+    public $modfiedItems = []; // List of OuputItemModel for modified items
+    public $originalItems = []; // List of OuputItemModel for original files
 }
-class OuputItemModel
-{
-  //full path for file
-  public $fullPath;
-  //message to display on the page
-  public $msg;
-  //status color. "black", "red", "green"
-  public $color;
-  //helper functions
-  function get_filename(){
-    return basename($fullPath);
-  }
 
-  function get_shortpath(){
-    global $pluginFolderPos;
-    return substr($this->fullPath, $pluginFolderPos);
-  }
-}
-$output = new OutputModel();
-$output->modfiedItems = [];
-$output->originalItems = [];
+/**
+ * Output item model class
+ */
+class OuputItemModel {
+    public $fullPath; // Full path for file
+    public $msg; // Message to display on the page
+    public $color; // Status color: 'black', 'red', 'green'
 
-//core functions 
-function get_file_list($dir, $recurse = FALSE)
-  {
-    $retval = [];
-
-    // add trailing slash if missing
-    if(substr($dir, -1) != "/") {
-      $dir .= "/";
+    /**
+     * Get the filename from the full path
+     *
+     * @return string The filename
+     */
+    function get_filename() {
+        return basename($this->fullPath);
     }
 
-    // open pointer to directory and read list of files
+    /**
+     * Get the shortened path
+     *
+     * @return string The shortened path
+     */
+    function get_shortpath() {
+        global $pluginFolderPos;
+        return substr($this->fullPath, $pluginFolderPos);
+    }
+}
+
+$output = new OutputModel();
+
+/**
+ * Get a list of files in a directory
+ *
+ * @param string $dir The directory to scan
+ * @param bool $recurse Whether to recurse into subdirectories
+ * @return array An array of file information
+ */
+function get_file_list($dir, $recurse = FALSE) {
+    $retval = [];
+
+    // Add trailing slash if missing
+    if (substr($dir, -1) != "/") {
+        $dir .= "/";
+    }
+
+    // Open pointer to directory and read list of files
     $d = @dir($dir) or die("getFileList: Failed opening directory {$dir} for reading");
-    while(FALSE !== ($entry = $d->read())) {
-      // skip hidden files
-      if($entry{0} == ".") continue;
-      if(is_dir("{$dir}{$entry}")) {
-        $retval[] = [
-          'name' => "{$dir}{$entry}/",
-          'type' => filetype("{$dir}{$entry}"),
-          'size' => 0,
-          'lastmod' => filemtime("{$dir}{$entry}")
-        ];
-        if($recurse && is_readable("{$dir}{$entry}/")) {
-          $retval = array_merge($retval, get_file_list("{$dir}{$entry}/", TRUE));
+    while (FALSE !== ($entry = $d->read())) {
+        // Skip hidden files
+        if ($entry[0] == ".") continue;
+        if (is_dir("{$dir}{$entry}")) {
+            $retval[] = [
+                'name' => "{$dir}{$entry}/",
+                'type' => filetype("{$dir}{$entry}"),
+                'size' => 0,
+                'lastmod' => filemtime("{$dir}{$entry}")
+            ];
+            if ($recurse && is_readable("{$dir}{$entry}/")) {
+                $retval = array_merge($retval, get_file_list("{$dir}{$entry}/", TRUE));
+            }
+        } elseif (is_readable("{$dir}{$entry}")) {
+            $retval[] = [
+                'name' => "{$dir}{$entry}",
+                'type' => mime_content_type("{$dir}{$entry}"),
+                'size' => filesize("{$dir}{$entry}"),
+                'lastmod' => filemtime("{$dir}{$entry}")
+            ];
         }
-      } elseif(is_readable("{$dir}{$entry}")) {
-        $retval[] = [
-          'name' => "{$dir}{$entry}",
-          'type' => mime_content_type("{$dir}{$entry}"),
-          'size' => filesize("{$dir}{$entry}"),
-          'lastmod' => filemtime("{$dir}{$entry}")
-        ];
-      }
     }
     $d->close();
 
     return $retval;
-  }
-
-function remove_server_path($path){
-  global $pluginFolderPos;
-  return substr($path, $pluginFolderPos);
 }
 
-function revert($enableLogging = false){
-  global $originalDir, $parentPluginDir, $newfilesDir, $output, $removeDir;
+/**
+ * Remove the server path from a full path
+ *
+ * @param string $path The full path
+ * @return string The path without the server part
+ */
+function remove_server_path($path) {
+    global $pluginFolderPos;
+    return substr($path, $pluginFolderPos);
+}
 
-  //loop through the files we modfied and apply those changes to the plugin directory
-  foreach(get_file_list($originalDir, true) as $file){
-    //ignore directory listing
-    if($file['type'] == 'dir')
-        continue;
-    
-    //define the working files
-    $modFile = $file['name'];
-    $oldFile = str_replace("-child/original", "", $modFile);
-    $originalFile = str_replace($parentPluginDir, $originalDir, $oldFile);
-    //stub out the ouput item models
-    $originalOutput = new OuputItemModel();
-    $originalOutput->fullPath = $originalFile;
-    $modifiedOuput = new OuputItemModel();
-    $modifiedOuput->fullPath = $oldFile;
+/**
+ * Revert changes made to the parent plugin
+ *
+ * @param bool $enableLogging Whether to enable logging of the revert operation
+ */
+function revert($enableLogging = false) {
+    global $originalDir, $parentPluginDir, $newfilesDir, $output, $removeDir;
 
-    //copy the original file back to the plugin
-    copy($originalFile, $oldFile);
-    $modifiedOuput->msg = "File reverted in parent directory";
-  
-    //delete the original file
-    unlink($originalFile);
-    $originalOutput->msg = "File deleted";
+    // Revert modified files
+    foreach (get_file_list($originalDir, true) as $file) {
+        if ($file['type'] == 'dir') continue;
 
-    //update ouput model
-    if($enableLogging){
-      array_push($output->modfiedItems, $modifiedOuput);
-      array_push($output->originalItems, $originalOutput);
+        $modFile = $file['name'];
+        $oldFile = str_replace("-child/original", "", $modFile);
+        $originalFile = str_replace($parentPluginDir, $originalDir, $oldFile);
+
+        $originalOutput = new OuputItemModel();
+        $originalOutput->fullPath = $originalFile;
+        $modifiedOuput = new OuputItemModel();
+        $modifiedOuput->fullPath = $oldFile;
+
+        copy($originalFile, $oldFile);
+        $modifiedOuput->msg = "File reverted in parent directory";
+
+        unlink($originalFile);
+        $originalOutput->msg = "File deleted";
+
+        if ($enableLogging) {
+            $output->modfiedItems[] = $modifiedOuput;
+            $output->originalItems[] = $originalOutput;
+        }
     }
-  }
 
-  //loop through the files that were added and remove them from the parent plugin
-  foreach(get_file_list($newfilesDir, true) as $file){
-    //ignore directory listing
-    if($file['type'] == 'dir')
-        continue;
-    
-    //define the working files
-    $newFile = $file['name'];
-    $oldFile = str_replace("-child/src/cache/newFiles", "", $newFile);
-    $modFile = str_replace("-child/src/cache/newFiles", "-child/modifications", $newFile);
-    
-    $modifiedOuput = new OuputItemModel();
-    $modifiedOuput->fullPath = $oldFile;
+    // Remove added files
+    foreach (get_file_list($newfilesDir, true) as $file) {
+        if ($file['type'] == 'dir') continue;
 
-    //copy the original file back to the plugin
-    unlink($oldFile);
-    //delete the new file from the newFiles cache
-    unlink($newFile);
-    $modifiedOuput->msg = "File removed from parent directory";
-  
-    //update ouput model
-    if($enableLogging)
-      array_push($output->modfiedItems, $modifiedOuput);
-  }
+        $newFile = $file['name'];
+        $oldFile = str_replace("-child/src/cache/newFiles", "", $newFile);
+        $modFile = str_replace("-child/src/cache/newFiles", "-child/modifications", $newFile);
 
-  //clear cache and original files justs in case
-  /*
-  array_map('unlink', glob("$originalDir/*.*"));
-  array_map('unlink', glob("$newfilesDir/*.*"));
-  rmdir($originalDir);
-  rmdir($newfilesDir);
-  mkdir($originalDir, 0777);
-  mkdir($newfilesDir, 0777);*/
+        $modifiedOuput = new OuputItemModel();
+        $modifiedOuput->fullPath = $oldFile;
+
+        unlink($oldFile);
+        unlink($newFile);
+        $modifiedOuput->msg = "File removed from parent directory";
+
+        if ($enableLogging) {
+            $output->modfiedItems[] = $modifiedOuput;
+        }
+    }
 }
