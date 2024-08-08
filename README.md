@@ -131,7 +131,6 @@ When the time comes and you need to update the parent plugin you're in luck. You
 1) Navigate to revert.php in your browser.
 2) Update the parent plugin.
 3) Navigate to apply.php in your browser.
-4) Pour yourself a beer. 
 
 That's it! 
 
